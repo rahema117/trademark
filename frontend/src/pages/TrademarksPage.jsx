@@ -5,7 +5,9 @@ import TrademarkTable from '../components/TrademarkTable';
 import TrademarkFormModal from '../components/TrademarkFormModal';
 import TrademarkDetailModal from '../components/TrademarkDetailModal';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
-import { Plus, ChevronRight, ChevronLeft } from 'lucide-react';
+import { getTrademarks } from '../api/trademarkApi';
+import { exportTrademarksToExcel } from '../utils/excelExporter';
+import { Plus, ChevronRight, ChevronLeft, FileSpreadsheet, AlertCircle } from 'lucide-react';
 
 const TrademarksPage = ({ initialStatusFilter = '', isFormOpen, setIsFormOpen }) => {
   const {
@@ -19,12 +21,75 @@ const TrademarksPage = ({ initialStatusFilter = '', isFormOpen, setIsFormOpen })
     refresh,
   } = useTrademarks({ status: initialStatusFilter });
 
+  const [selectedMap, setSelectedMap] = useState({});
   const [selectedTrademark, setSelectedTrademark] = useState(null);
   const [trademarkToEdit, setTrademarkToEdit] = useState(null);
   const [trademarkToDelete, setTrademarkToDelete] = useState(null);
 
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+
+  const [exportMessage, setExportMessage] = useState('');
+  const [exportingAll, setExportingAll] = useState(false);
+
+  const selectedIds = Object.keys(selectedMap);
+
+  const handleSelectToggle = (id) => {
+    setSelectedMap((prev) => {
+      const next = { ...prev };
+      if (next[id]) {
+        delete next[id];
+      } else {
+        const found = trademarks.find((t) => t._id === id);
+        if (found) next[id] = found;
+      }
+      return next;
+    });
+  };
+
+  const handleSelectAllToggle = () => {
+    const currentIds = trademarks.map((tm) => tm._id);
+    const allCurrentSelected = currentIds.every((id) => !!selectedMap[id]);
+
+    setSelectedMap((prev) => {
+      const next = { ...prev };
+      if (allCurrentSelected) {
+        currentIds.forEach((id) => delete next[id]);
+      } else {
+        trademarks.forEach((tm) => {
+          next[tm._id] = tm;
+        });
+      }
+      return next;
+    });
+  };
+
+  const handleExportSelected = () => {
+    setExportMessage('');
+    if (selectedIds.length === 0) {
+      setExportMessage('Please select at least one trademark to export.');
+      return;
+    }
+    const selectedList = Object.values(selectedMap);
+    exportTrademarksToExcel(selectedList, 'selected-trademarks.xlsx');
+  };
+
+  const handleExportAll = async () => {
+    setExportMessage('');
+    setExportingAll(true);
+    try {
+      const res = await getTrademarks({ limit: 'all', ...filters });
+      if (res.success && res.data) {
+        exportTrademarksToExcel(res.data, 'trademarks.xlsx');
+      } else {
+        setExportMessage('حدث خطأ أثناء جلب البيانات للتصدير');
+      }
+    } catch (err) {
+      setExportMessage(err.message || 'فشل في تصدير البيانات');
+    } finally {
+      setExportingAll(false);
+    }
+  };
 
   const handleOpenAddModal = () => {
     setTrademarkToEdit(null);
@@ -55,6 +120,8 @@ const TrademarksPage = ({ initialStatusFilter = '', isFormOpen, setIsFormOpen })
           alignItems: 'center',
           justifyContent: 'space-between',
           marginBottom: '1.5rem',
+          flexWrap: 'wrap',
+          gap: '1rem',
         }}
       >
         <div>
@@ -62,19 +129,41 @@ const TrademarksPage = ({ initialStatusFilter = '', isFormOpen, setIsFormOpen })
             سجل العلامات التجارية
           </h2>
           <p style={{ color: '#475569', fontSize: '0.9rem', marginTop: '0.25rem' }}>
-            عرض، تصفية، وتعديل العلامات المسجلة بالنظام
+            عرض، تصفية، تصدير وتعديل العلامات المسجلة بالنظام
           </p>
         </div>
 
-        <button onClick={handleOpenAddModal} className="btn btn-primary">
-          <Plus size={20} />
-          <span>إضافة علامة جديدة</span>
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <button
+            onClick={handleExportSelected}
+            className="btn btn-secondary"
+            title="تصدير العلامات المحددة فقط"
+          >
+            <FileSpreadsheet size={18} style={{ color: '#16a34a' }} />
+            <span>تصدير المحدد ({selectedIds.length})</span>
+          </button>
+
+          <button
+            onClick={handleExportAll}
+            disabled={exportingAll}
+            className="btn btn-secondary"
+            title="تصدير جميع العلامات"
+          >
+            <FileSpreadsheet size={18} style={{ color: '#0284c7' }} />
+            <span>{exportingAll ? 'جاري التصدير...' : 'تصدير الكل'}</span>
+          </button>
+
+          <button onClick={handleOpenAddModal} className="btn btn-primary">
+            <Plus size={20} />
+            <span>إضافة علامة جديدة</span>
+          </button>
+        </div>
       </div>
 
-      {error && (
-        <div className="alert alert-danger" style={{ marginBottom: '1.5rem' }}>
-          <span>{error}</span>
+      {(error || exportMessage) && (
+        <div className="alert alert-danger" style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <AlertCircle size={18} />
+          <span>{exportMessage || error}</span>
         </div>
       )}
 
@@ -89,6 +178,9 @@ const TrademarksPage = ({ initialStatusFilter = '', isFormOpen, setIsFormOpen })
       <TrademarkTable
         trademarks={trademarks}
         loading={loading}
+        selectedIds={selectedIds}
+        onSelectToggle={handleSelectToggle}
+        onSelectAllToggle={handleSelectAllToggle}
         onView={handleOpenDetailModal}
         onEdit={handleOpenEditModal}
         onDelete={handleOpenDeleteModal}

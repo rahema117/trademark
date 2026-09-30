@@ -13,8 +13,10 @@ const TrademarkFormModal = ({ isOpen, onClose, trademarkToEdit, onSuccess }) => 
     classNumber: '',
     ownerNameAr: '',
     ownerNameEn: '',
-    status: 'Active',
+    nationality: '',
     filingDate: '',
+    expiryDate: '',
+    status: 'Active',
     agentName: '',
   });
 
@@ -29,11 +31,13 @@ const TrademarkFormModal = ({ isOpen, onClose, trademarkToEdit, onSuccess }) => 
         trademarkNumber: trademarkToEdit.trademarkNumber || '',
         nameAr: trademarkToEdit.nameAr || '',
         nameEn: trademarkToEdit.nameEn || '',
-        classNumber: trademarkToEdit.classNumber || '',
+        classNumber: trademarkToEdit.classNumber !== null && trademarkToEdit.classNumber !== undefined ? trademarkToEdit.classNumber : '',
         ownerNameAr: trademarkToEdit.ownerNameAr || '',
         ownerNameEn: trademarkToEdit.ownerNameEn || '',
-        status: trademarkToEdit.status || 'Active',
+        nationality: trademarkToEdit.nationality || '',
         filingDate: formatDate(trademarkToEdit.filingDate),
+        expiryDate: formatDate(trademarkToEdit.expiryDate),
+        status: trademarkToEdit.status || 'Active',
         agentName: trademarkToEdit.agentName || '',
       });
       setImagePreview(getImageUrl(trademarkToEdit.image));
@@ -45,8 +49,10 @@ const TrademarkFormModal = ({ isOpen, onClose, trademarkToEdit, onSuccess }) => 
         classNumber: '',
         ownerNameAr: '',
         ownerNameEn: '',
+        nationality: '',
+        filingDate: '',
+        expiryDate: '',
         status: 'Active',
-        filingDate: new Date().toISOString().split('T')[0],
         agentName: '',
       });
       setImagePreview(null);
@@ -65,13 +71,11 @@ const TrademarkFormModal = ({ isOpen, onClose, trademarkToEdit, onSuccess }) => 
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      // Validate type
       const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
       if (!validTypes.includes(file.mimetype) && !/\.(jpg|jpeg|png|webp)$/i.test(file.name)) {
         setErrorMessage('مسموح فقط برفع الصور بصيغ (JPG, JPEG, PNG, WEBP)');
         return;
       }
-      // Validate size (5MB)
       if (file.size > 5 * 1024 * 1024) {
         setErrorMessage('حجم الصورة يتجاوز الحد المسموح به (5 ميجابايت)');
         return;
@@ -87,25 +91,18 @@ const TrademarkFormModal = ({ isOpen, onClose, trademarkToEdit, onSuccess }) => 
     e.preventDefault();
     setErrorMessage('');
 
-    // Basic frontend validations
-    if (
-      !formData.trademarkNumber ||
-      !formData.nameAr ||
-      !formData.nameEn ||
-      !formData.classNumber ||
-      !formData.ownerNameAr ||
-      !formData.ownerNameEn ||
-      !formData.status ||
-      !formData.filingDate
-    ) {
-      setErrorMessage('يرجى ملء جميع الحقول المطلوبة');
+    // ONLY trademarkNumber, nameAr, nameEn are required
+    if (!formData.trademarkNumber.trim() || !formData.nameAr.trim() || !formData.nameEn.trim()) {
+      setErrorMessage('يرجى ملء الحقول المطلوبة (رقم العلامة، اسم العلامة بالعربي، اسم العلامة بالإنجليزي)');
       return;
     }
 
-    const classNum = parseInt(formData.classNumber, 10);
-    if (isNaN(classNum) || classNum <= 0) {
-      setErrorMessage('رقم الفئة يجب أن يكون رقماً صحيحاً موجباً');
-      return;
+    if (formData.classNumber !== '') {
+      const classNum = parseInt(formData.classNumber, 10);
+      if (isNaN(classNum) || classNum <= 0) {
+        setErrorMessage('رقم الفئة يجب أن يكون رقماً صحيحاً موجباً');
+        return;
+      }
     }
 
     setLoading(true);
@@ -115,11 +112,13 @@ const TrademarkFormModal = ({ isOpen, onClose, trademarkToEdit, onSuccess }) => 
       data.append('trademarkNumber', formData.trademarkNumber.trim());
       data.append('nameAr', formData.nameAr.trim());
       data.append('nameEn', formData.nameEn.trim());
-      data.append('classNumber', classNum);
+      data.append('classNumber', formData.classNumber !== '' ? formData.classNumber : '');
       data.append('ownerNameAr', formData.ownerNameAr.trim());
       data.append('ownerNameEn', formData.ownerNameEn.trim());
+      data.append('nationality', formData.nationality.trim());
       data.append('status', formData.status);
       data.append('filingDate', formData.filingDate);
+      data.append('expiryDate', formData.expiryDate);
       data.append('agentName', formData.agentName.trim());
 
       if (imageFile) {
@@ -162,7 +161,7 @@ const TrademarkFormModal = ({ isOpen, onClose, trademarkToEdit, onSuccess }) => 
               </div>
             )}
 
-            {/* Image Upload Area */}
+            {/* Trademark Image / Logo */}
             <div className="form-group">
               <label className="form-label">صورة العلامة / الشعار</label>
               <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
@@ -196,8 +195,8 @@ const TrademarkFormModal = ({ isOpen, onClose, trademarkToEdit, onSuccess }) => 
               </div>
             </div>
 
+            {/* Trademark Number * | Class */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              {/* Trademark Number */}
               <div className="form-group">
                 <label className="form-label">رقم العلامة التجارية *</label>
                 <input
@@ -211,9 +210,8 @@ const TrademarkFormModal = ({ isOpen, onClose, trademarkToEdit, onSuccess }) => 
                 />
               </div>
 
-              {/* Class Number */}
               <div className="form-group">
-                <label className="form-label">رقم الفئة (Class) *</label>
+                <label className="form-label">رقم الفئة (Class)</label>
                 <input
                   type="number"
                   name="classNumber"
@@ -222,13 +220,12 @@ const TrademarkFormModal = ({ isOpen, onClose, trademarkToEdit, onSuccess }) => 
                   placeholder="مثال: 35"
                   value={formData.classNumber}
                   onChange={handleInputChange}
-                  required
                 />
               </div>
             </div>
 
+            {/* Trademark Name Arabic * | Trademark Name English * */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              {/* Arabic Name */}
               <div className="form-group">
                 <label className="form-label">اسم العلامة (عربي) *</label>
                 <input
@@ -242,7 +239,6 @@ const TrademarkFormModal = ({ isOpen, onClose, trademarkToEdit, onSuccess }) => 
                 />
               </div>
 
-              {/* English Name */}
               <div className="form-group">
                 <label className="form-label">اسم العلامة (إنجليزي) *</label>
                 <input
@@ -258,10 +254,10 @@ const TrademarkFormModal = ({ isOpen, onClose, trademarkToEdit, onSuccess }) => 
               </div>
             </div>
 
+            {/* Owner Name Arabic | Owner Name English */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              {/* Arabic Owner Name */}
               <div className="form-group">
-                <label className="form-label">اسم المالك (عربي) *</label>
+                <label className="form-label">اسم المالك (عربي)</label>
                 <input
                   type="text"
                   name="ownerNameAr"
@@ -269,13 +265,11 @@ const TrademarkFormModal = ({ isOpen, onClose, trademarkToEdit, onSuccess }) => 
                   placeholder="اسم المالك بالعربي"
                   value={formData.ownerNameAr}
                   onChange={handleInputChange}
-                  required
                 />
               </div>
 
-              {/* English Owner Name */}
               <div className="form-group">
-                <label className="form-label">اسم المالك (إنجليزي) *</label>
+                <label className="form-label">اسم المالك (إنجليزي)</label>
                 <input
                   type="text"
                   name="ownerNameEn"
@@ -284,46 +278,67 @@ const TrademarkFormModal = ({ isOpen, onClose, trademarkToEdit, onSuccess }) => 
                   style={{ direction: 'ltr', textAlign: 'right' }}
                   value={formData.ownerNameEn}
                   onChange={handleInputChange}
-                  required
                 />
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              {/* Status */}
-              <div className="form-group">
-                <label className="form-label">الحالة *</label>
-                <select
-                  name="status"
-                  className="form-control"
-                  value={formData.status}
-                  onChange={handleInputChange}
-                  required
-                >
-                  <option value="Active">نشطة (Active)</option>
-                  <option value="Pending">قيد الانتظار (Pending)</option>
-                  <option value="Expired">منتهية (Expired)</option>
-                  <option value="Cancelled">ملغاة (Cancelled)</option>
-                </select>
-              </div>
+            {/* Nationality */}
+            <div className="form-group">
+              <label className="form-label">الجنسية</label>
+              <input
+                type="text"
+                name="nationality"
+                className="form-control"
+                placeholder="مثال: سعودي، إماراتي، مصري..."
+                value={formData.nationality}
+                onChange={handleInputChange}
+              />
+            </div>
 
-              {/* Filing Date */}
+            {/* Filing Date | Expiry Date */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
               <div className="form-group">
-                <label className="form-label">تاريخ الإيداع *</label>
+                <label className="form-label">تاريخ الإيداع</label>
                 <input
                   type="date"
                   name="filingDate"
                   className="form-control"
                   value={formData.filingDate}
                   onChange={handleInputChange}
-                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label className="form-label">تاريخ الانتهاء</label>
+                <input
+                  type="date"
+                  name="expiryDate"
+                  className="form-control"
+                  value={formData.expiryDate}
+                  onChange={handleInputChange}
                 />
               </div>
             </div>
 
+            {/* Status */}
+            <div className="form-group">
+              <label className="form-label">الحالة</label>
+              <select
+                name="status"
+                className="form-control"
+                value={formData.status}
+                onChange={handleInputChange}
+              >
+                <option value="Active">نشطة (Active)</option>
+                <option value="Pending">قيد الانتظار (Pending)</option>
+                <option value="Expired">منتهية (Expired)</option>
+                <option value="Cancelled">ملغاة (Cancelled)</option>
+              </select>
+            </div>
+
             {/* Agent Name */}
             <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">اسم الوكيل (اختياري)</label>
+              <label className="form-label">اسم الوكيل</label>
               <input
                 type="text"
                 name="agentName"

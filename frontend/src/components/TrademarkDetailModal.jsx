@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Calendar, User, Shield, Hash, Layers, Image as ImageIcon, Clock } from 'lucide-react';
+import { X, Calendar, User, Shield, Hash, Layers, Image as ImageIcon, Clock, Globe } from 'lucide-react';
 import { formatDate, formatDateTime, getStatusBadge, getImageUrl } from '../utils/formatters';
 
 const TrademarkDetailModal = ({ isOpen, onClose, trademark }) => {
@@ -66,24 +66,26 @@ const TrademarkDetailModal = ({ isOpen, onClose, trademark }) => {
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.35rem' }}>
                 <span className={`badge ${statusInfo.className}`}>{statusInfo.label}</span>
-                <span
-                  style={{
-                    backgroundColor: '#e2e8f0',
-                    color: '#0f172a',
-                    padding: '0.15rem 0.5rem',
-                    borderRadius: '4px',
-                    fontSize: '0.8rem',
-                    fontWeight: 700,
-                  }}
-                >
-                  الفئة {trademark.classNumber}
-                </span>
+                {trademark.classNumber ? (
+                  <span
+                    style={{
+                      backgroundColor: '#e2e8f0',
+                      color: '#0f172a',
+                      padding: '0.15rem 0.5rem',
+                      borderRadius: '4px',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                    }}
+                  >
+                    الفئة {trademark.classNumber}
+                  </span>
+                ) : null}
               </div>
               <h3 style={{ fontSize: '1.3rem', fontWeight: 800, color: '#0f172a', margin: '0 0 0.2rem 0' }}>
-                {trademark.nameAr}
+                {trademark.nameAr || '-'}
               </h3>
               <p style={{ color: '#475569', fontSize: '0.95rem', margin: 0, direction: 'ltr', textAlign: 'right' }}>
-                {trademark.nameEn}
+                {trademark.nameEn || '-'}
               </p>
             </div>
           </div>
@@ -107,6 +109,15 @@ const TrademarkDetailModal = ({ isOpen, onClose, trademark }) => {
 
             <div>
               <span style={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <Globe size={14} /> الجنسية
+              </span>
+              <p style={{ fontWeight: 600, fontSize: '0.95rem', color: '#0f172a', marginTop: '0.2rem' }}>
+                {trademark.nationality || 'غير محدد'}
+              </p>
+            </div>
+
+            <div>
+              <span style={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                 <Calendar size={14} /> تاريخ الإيداع
               </span>
               <p style={{ fontWeight: 600, fontSize: '0.95rem', color: '#0f172a', marginTop: '0.2rem' }}>
@@ -116,10 +127,19 @@ const TrademarkDetailModal = ({ isOpen, onClose, trademark }) => {
 
             <div>
               <span style={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <Calendar size={14} /> تاريخ الانتهاء
+              </span>
+              <p style={{ fontWeight: 600, fontSize: '0.95rem', color: '#0f172a', marginTop: '0.2rem' }}>
+                {formatDate(trademark.expiryDate)}
+              </p>
+            </div>
+
+            <div>
+              <span style={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                 <User size={14} /> المالك (عربي)
               </span>
               <p style={{ fontWeight: 600, fontSize: '0.95rem', color: '#0f172a', marginTop: '0.2rem' }}>
-                {trademark.ownerNameAr}
+                {trademark.ownerNameAr || 'لا يوجد'}
               </p>
             </div>
 
@@ -137,7 +157,7 @@ const TrademarkDetailModal = ({ isOpen, onClose, trademark }) => {
                   textAlign: 'right',
                 }}
               >
-                {trademark.ownerNameEn}
+                {trademark.ownerNameEn || 'لا يوجد'}
               </p>
             </div>
 

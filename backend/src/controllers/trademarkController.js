@@ -1,6 +1,6 @@
 const Trademark = require('../models/Trademark');
 const { sendSuccess, sendPaginated, sendError } = require('../utils/responseHandler');
-const { deleteFile, getPublicUrl } = require('../services/storageService');
+const { uploadImage, deleteFile } = require('../services/storageService');
 
 /**
  * @desc    Create a new trademark
@@ -16,60 +16,54 @@ const createTrademark = async (req, res, next) => {
       classNumber,
       ownerNameAr,
       ownerNameEn,
+      nationality,
       status,
       filingDate,
+      expiryDate,
       agentName,
     } = req.body;
 
-    // Validate required fields
-    if (
-      !trademarkNumber ||
-      !nameAr ||
-      !nameEn ||
-      !classNumber ||
-      !ownerNameAr ||
-      !ownerNameEn ||
-      !status ||
-      !filingDate
-    ) {
-      if (req.file) deleteFile(getPublicUrl(req.file.filename));
-      return sendError(res, 'جميع الحقول المطلوبة يجب إدخالها', 400);
+    // ONLY trademarkNumber, nameAr, and nameEn are REQUIRED
+    if (!trademarkNumber || !nameAr || !nameEn) {
+      return sendError(res, 'رقم العلامة التجارية واسم العلامة بالعربي والإنجليزي مطلوبة', 400);
     }
 
-    const classNum = parseInt(classNumber, 10);
-    if (isNaN(classNum) || classNum <= 0) {
-      if (req.file) deleteFile(getPublicUrl(req.file.filename));
-      return sendError(res, 'رقم الفئة يجب أن يكون رقماً صحيحاً موجباً', 400);
+    let classNum = null;
+    if (classNumber !== undefined && classNumber !== null && classNumber !== '') {
+      classNum = parseInt(classNumber, 10);
+      if (isNaN(classNum) || classNum <= 0) {
+        return sendError(res, 'رقم الفئة يجب أن يكون رقماً صحيحاً موجباً', 400);
+      }
     }
 
     // Check uniqueness of trademark number
     const existing = await Trademark.findOne({ trademarkNumber: trademarkNumber.trim() });
     if (existing) {
-      if (req.file) deleteFile(getPublicUrl(req.file.filename));
       return sendError(res, 'رقم العلامة التجارية مسجل بالفعل', 400);
     }
 
-    let imagePath = '';
+    let imageUrl = '';
     if (req.file) {
-      imagePath = getPublicUrl(req.file.filename);
+      imageUrl = await uploadImage(req.file);
     }
 
     const trademark = await Trademark.create({
-      image: imagePath,
+      image: imageUrl,
       trademarkNumber: trademarkNumber.trim(),
       nameAr: nameAr.trim(),
       nameEn: nameEn.trim(),
       classNumber: classNum,
-      ownerNameAr: ownerNameAr.trim(),
-      ownerNameEn: ownerNameEn.trim(),
-      status,
-      filingDate: new Date(filingDate),
+      ownerNameAr: ownerNameAr ? ownerNameAr.trim() : '',
+      ownerNameEn: ownerNameEn ? ownerNameEn.trim() : '',
+      nationality: nationality ? nationality.trim() : '',
+      status: status || 'Active',
+      filingDate: filingDate ? new Date(filingDate) : null,
+      expiryDate: expiryDate ? new Date(expiryDate) : null,
       agentName: agentName ? agentName.trim() : '',
     });
 
     return sendSuccess(res, trademark, 'تم إضافة العلامة التجارية بنجاح', 201);
   } catch (error) {
-    if (req.file) deleteFile(getPublicUrl(req.file.filename));
     next(error);
   }
 };
@@ -81,9 +75,10 @@ const createTrademark = async (req, res, next) => {
  */
 const getTrademarks = async (req, res, next) => {
   try {
+    const isExportAll = req.query.limit === 'all' || req.query.limit === '0' || req.query.all === 'true';
     const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 20;
-    const skip = (page - 1) * limit;
+    const limit = isExportAll ? 0 : parseInt(req.query.limit, 10) || 20;
+    const skip = isExportAll ? 0 : (page - 1) * limit;
 
     const {
       search,
@@ -123,7 +118,7 @@ const getTrademarks = async (req, res, next) => {
       }
     }
 
-    // 4. Search Filter (partial matching across multiple fields)
+    // 4. Search Filter
     if (search && search.trim() !== '') {
       const searchRegex = new RegExp(search.trim(), 'i');
       filter.$or = [
@@ -132,30 +127,36 @@ const getTrademarks = async (req, res, next) => {
         { nameEn: searchRegex },
         { ownerNameAr: searchRegex },
         { ownerNameEn: searchRegex },
+        { nationality: searchRegex },
         { agentName: searchRegex },
       ];
     }
 
     // Sort order setup
     const sortOptions = {};
-    const sortField = ['filingDate', 'trademarkNumber', 'createdAt', 'nameAr', 'nameEn', 'classNumber'].includes(sort)
+    const sortField = ['filingDate', 'expiryDate', 'trademarkNumber', 'createdAt', 'nameAr', 'nameEn', 'classNumber'].includes(sort)
       ? sort
       : 'createdAt';
     sortOptions[sortField] = order === 'asc' ? 1 : -1;
 
+    let findQuery = Trademark.find(filter).sort(sortOptions);
+    if (!isExportAll && limit > 0) {
+      findQuery = findQuery.skip(skip).limit(limit);
+    }
+
     const [trademarks, total] = await Promise.all([
-      Trademark.find(filter).sort(sortOptions).skip(skip).limit(limit),
+      findQuery,
       Trademark.countDocuments(filter),
     ]);
 
-    const totalPages = Math.ceil(total / limit) || 1;
+    const totalPages = isExportAll ? 1 : Math.ceil(total / limit) || 1;
 
     return sendPaginated(
       res,
       trademarks,
       {
-        page,
-        limit,
+        page: isExportAll ? 1 : page,
+        limit: isExportAll ? total : limit,
         total,
         totalPages,
       },
@@ -223,7 +224,6 @@ const updateTrademark = async (req, res, next) => {
   try {
     const trademark = await Trademark.findById(req.params.id);
     if (!trademark) {
-      if (req.file) deleteFile(getPublicUrl(req.file.filename));
       return sendError(res, 'العلامة التجارية غير موجودة', 404);
     }
 
@@ -234,8 +234,10 @@ const updateTrademark = async (req, res, next) => {
       classNumber,
       ownerNameAr,
       ownerNameEn,
+      nationality,
       status,
       filingDate,
+      expiryDate,
       agentName,
     } = req.body;
 
@@ -243,42 +245,56 @@ const updateTrademark = async (req, res, next) => {
     if (trademarkNumber && trademarkNumber.trim() !== trademark.trademarkNumber) {
       const existing = await Trademark.findOne({ trademarkNumber: trademarkNumber.trim() });
       if (existing) {
-        if (req.file) deleteFile(getPublicUrl(req.file.filename));
         return sendError(res, 'رقم العلامة التجارية مسجل بالفعل لعنصر آخر', 400);
       }
       trademark.trademarkNumber = trademarkNumber.trim();
     }
 
-    if (classNumber) {
-      const classNum = parseInt(classNumber, 10);
-      if (isNaN(classNum) || classNum <= 0) {
-        if (req.file) deleteFile(getPublicUrl(req.file.filename));
-        return sendError(res, 'رقم الفئة يجب أن يكون رقماً صحيحاً موجباً', 400);
-      }
-      trademark.classNumber = classNum;
-    }
-
     if (nameAr) trademark.nameAr = nameAr.trim();
     if (nameEn) trademark.nameEn = nameEn.trim();
-    if (ownerNameAr) trademark.ownerNameAr = ownerNameAr.trim();
-    if (ownerNameEn) trademark.ownerNameEn = ownerNameEn.trim();
-    if (status) trademark.status = status;
-    if (filingDate) trademark.filingDate = new Date(filingDate);
+
+    if (classNumber !== undefined) {
+      if (classNumber === '' || classNumber === null) {
+        trademark.classNumber = null;
+      } else {
+        const classNum = parseInt(classNumber, 10);
+        if (isNaN(classNum) || classNum <= 0) {
+          return sendError(res, 'رقم الفئة يجب أن يكون رقماً صحيحاً موجباً', 400);
+        }
+        trademark.classNumber = classNum;
+      }
+    }
+
+    if (ownerNameAr !== undefined) trademark.ownerNameAr = ownerNameAr ? ownerNameAr.trim() : '';
+    if (ownerNameEn !== undefined) trademark.ownerNameEn = ownerNameEn ? ownerNameEn.trim() : '';
+    if (nationality !== undefined) trademark.nationality = nationality ? nationality.trim() : '';
+    if (status !== undefined) trademark.status = status;
+    
+    if (filingDate !== undefined) {
+      trademark.filingDate = filingDate ? new Date(filingDate) : null;
+    }
+
+    if (expiryDate !== undefined) {
+      trademark.expiryDate = expiryDate ? new Date(expiryDate) : null;
+    }
+
     if (agentName !== undefined) trademark.agentName = agentName ? agentName.trim() : '';
 
-    // If new image uploaded, replace existing image and delete old file
+    // If new image uploaded, replace existing image and delete old image
     if (req.file) {
-      if (trademark.image) {
-        deleteFile(trademark.image);
+      const oldImage = trademark.image;
+      const newImageUrl = await uploadImage(req.file);
+      trademark.image = newImageUrl;
+
+      if (oldImage) {
+        deleteFile(oldImage).catch((err) => console.error('[StorageService] Error deleting old image:', err));
       }
-      trademark.image = getPublicUrl(req.file.filename);
     }
 
     await trademark.save();
 
     return sendSuccess(res, trademark, 'تم تحديث العلامة التجارية بنجاح');
   } catch (error) {
-    if (req.file) deleteFile(getPublicUrl(req.file.filename));
     next(error);
   }
 };
@@ -295,9 +311,8 @@ const deleteTrademark = async (req, res, next) => {
       return sendError(res, 'العلامة التجارية غير موجودة', 404);
     }
 
-    // Delete associated image file if exists
     if (trademark.image) {
-      deleteFile(trademark.image);
+      deleteFile(trademark.image).catch((err) => console.error('[StorageService] Error deleting image:', err));
     }
 
     await trademark.deleteOne();
