@@ -56,8 +56,14 @@ const TrademarkTable = ({
             <th>المالك</th>
             <th>الجنسية</th>
             <th>الحالة</th>
-            <th>تاريخ الإيداع</th>
-            <th>تاريخ الانتهاء</th>
+            <th>
+              <div>Filing Date</div>
+              <div>تاريخ الإيداع</div>
+            </th>
+            <th>
+              <div>Expiry Date</div>
+              <div>تاريخ الانتهاء</div>
+            </th>
             <th>اسم الوكيل</th>
             <th style={{ textAlign: 'center' }}>الإجراءات</th>
           </tr>

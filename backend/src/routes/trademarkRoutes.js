@@ -7,6 +7,7 @@ const {
   getTrademarkById,
   updateTrademark,
   deleteTrademark,
+  exportTrademarks,
 } = require('../controllers/trademarkController');
 const { protect } = require('../middleware/authMiddleware');
 const uploadSingleImage = require('../middleware/uploadMiddleware');
@@ -15,6 +16,7 @@ const uploadSingleImage = require('../middleware/uploadMiddleware');
 router.use(protect);
 
 router.get('/stats', getTrademarkStats);
+router.post('/export', exportTrademarks);
 router.get('/', getTrademarks);
 router.post('/', uploadSingleImage, createTrademark);
 router.get('/:id', getTrademarkById);

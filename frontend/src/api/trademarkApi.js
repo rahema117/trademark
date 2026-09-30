@@ -31,3 +31,10 @@ export const updateTrademark = async (id, formData) => {
 export const deleteTrademark = async (id) => {
   return await apiClient.delete(`/trademarks/${id}`);
 };
+
+export const exportTrademarksApi = async (data = {}) => {
+  const response = await apiClient.post('/trademarks/export', data, {
+    responseType: 'blob',
+  });
+  return response.data;
+};

@@ -172,15 +172,6 @@ const TrademarkDetailModal = ({ isOpen, onClose, trademark }) => {
 
             <div>
               <span style={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                <Clock size={14} /> تاريخ الإنشاء
-              </span>
-              <p style={{ fontWeight: 600, fontSize: '0.85rem', color: '#475569', marginTop: '0.2rem' }}>
-                {formatDateTime(trademark.createdAt)}
-              </p>
-            </div>
-
-            <div style={{ gridColumn: 'span 2' }}>
-              <span style={{ fontSize: '0.8rem', color: '#64748b', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                 <Clock size={14} /> آخر تحديث
               </span>
               <p style={{ fontWeight: 600, fontSize: '0.85rem', color: '#475569', marginTop: '0.2rem' }}>

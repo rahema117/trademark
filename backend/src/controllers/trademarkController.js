@@ -1,6 +1,74 @@
+const ExcelJS = require('exceljs');
+const https = require('https');
+const http = require('http');
+const path = require('path');
+const fs = require('fs');
+
 const Trademark = require('../models/Trademark');
 const { sendSuccess, sendPaginated, sendError } = require('../utils/responseHandler');
 const { uploadImage, deleteFile } = require('../services/storageService');
+
+/**
+ * Helper to download/read image buffer for Excel embedding
+ */
+const fetchImageBuffer = async (imagePath) => {
+  if (!imagePath) return null;
+
+  try {
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      let fullUrl = imagePath;
+      if (fullUrl.includes('cloudinary.com') && fullUrl.endsWith('.webp')) {
+        fullUrl = fullUrl.replace(/\.webp$/i, '.png');
+      }
+
+      return new Promise((resolve) => {
+        const client = fullUrl.startsWith('https') ? https : http;
+        const request = client.get(fullUrl, (res) => {
+          if (res.statusCode !== 200) {
+            return resolve(null);
+          }
+          const chunks = [];
+          res.on('data', (chunk) => chunks.push(chunk));
+          res.on('end', () => {
+            const buffer = Buffer.concat(chunks);
+            const contentType = res.headers['content-type'] || '';
+            let extension = 'png';
+            if (contentType.includes('jpeg') || contentType.includes('jpg')) {
+              extension = 'jpeg';
+            } else if (contentType.includes('png')) {
+              extension = 'png';
+            } else if (contentType.includes('gif')) {
+              extension = 'gif';
+            } else if (/\.(jpg|jpeg)$/i.test(fullUrl)) {
+              extension = 'jpeg';
+            }
+            resolve({ buffer, extension });
+          });
+          res.on('error', () => resolve(null));
+        });
+        request.on('error', () => resolve(null));
+        request.setTimeout(10000, () => {
+          request.destroy();
+          resolve(null);
+        });
+      });
+    } else {
+      const localPath = path.isAbsolute(imagePath)
+        ? imagePath
+        : path.join(process.cwd(), imagePath.startsWith('/') ? imagePath.slice(1) : imagePath);
+
+      if (fs.existsSync(localPath)) {
+        const buffer = fs.readFileSync(localPath);
+        const ext = path.extname(localPath).toLowerCase().replace('.', '');
+        const extension = ext === 'jpg' ? 'jpeg' : (ext || 'png');
+        return { buffer, extension };
+      }
+    }
+  } catch (err) {
+    console.error('[ExcelExport] Image fetch error:', err.message);
+  }
+  return null;
+};
 
 /**
  * @desc    Create a new trademark
@@ -19,7 +87,6 @@ const createTrademark = async (req, res, next) => {
       nationality,
       status,
       filingDate,
-      expiryDate,
       agentName,
     } = req.body;
 
@@ -58,7 +125,6 @@ const createTrademark = async (req, res, next) => {
       nationality: nationality ? nationality.trim() : '',
       status: status || 'Active',
       filingDate: filingDate ? new Date(filingDate) : null,
-      expiryDate: expiryDate ? new Date(expiryDate) : null,
       agentName: agentName ? agentName.trim() : '',
     });
 
@@ -237,7 +303,6 @@ const updateTrademark = async (req, res, next) => {
       nationality,
       status,
       filingDate,
-      expiryDate,
       agentName,
     } = req.body;
 
@@ -272,10 +337,6 @@ const updateTrademark = async (req, res, next) => {
     
     if (filingDate !== undefined) {
       trademark.filingDate = filingDate ? new Date(filingDate) : null;
-    }
-
-    if (expiryDate !== undefined) {
-      trademark.expiryDate = expiryDate ? new Date(expiryDate) : null;
     }
 
     if (agentName !== undefined) trademark.agentName = agentName ? agentName.trim() : '';
@@ -323,6 +384,154 @@ const deleteTrademark = async (req, res, next) => {
   }
 };
 
+/**
+ * @desc    Export trademarks to Excel with embedded images
+ * @route   POST /api/trademarks/export
+ * @access  Private
+ */
+const exportTrademarks = async (req, res, next) => {
+  try {
+    const { ids, search, status, classNumber, filingDateFrom, filingDateTo, sort = 'createdAt', order = 'desc' } = req.body || {};
+
+    let filter = {};
+
+    if (Array.isArray(ids) && ids.length > 0) {
+      filter._id = { $in: ids };
+    } else {
+      if (status) filter.status = status;
+      if (classNumber) {
+        const parsedClass = parseInt(classNumber, 10);
+        if (!isNaN(parsedClass)) filter.classNumber = parsedClass;
+      }
+      if (filingDateFrom || filingDateTo) {
+        filter.filingDate = {};
+        if (filingDateFrom) filter.filingDate.$gte = new Date(filingDateFrom);
+        if (filingDateTo) {
+          const toDate = new Date(filingDateTo);
+          toDate.setHours(23, 59, 59, 999);
+          filter.filingDate.$lte = toDate;
+        }
+      }
+      if (search && search.trim() !== '') {
+        const searchRegex = new RegExp(search.trim(), 'i');
+        filter.$or = [
+          { trademarkNumber: searchRegex },
+          { nameAr: searchRegex },
+          { nameEn: searchRegex },
+          { ownerNameAr: searchRegex },
+          { ownerNameEn: searchRegex },
+          { nationality: searchRegex },
+          { agentName: searchRegex },
+        ];
+      }
+    }
+
+    const sortOptions = {};
+    const sortField = ['filingDate', 'expiryDate', 'trademarkNumber', 'createdAt', 'nameAr', 'nameEn', 'classNumber'].includes(sort)
+      ? sort
+      : 'createdAt';
+    sortOptions[sortField] = order === 'asc' ? 1 : -1;
+
+    const trademarks = await Trademark.find(filter).sort(sortOptions);
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet('Trademarks');
+
+    worksheet.columns = [
+      { header: 'Image', key: 'image', width: 16 },
+      { header: 'Trademark Number', key: 'trademarkNumber', width: 20 },
+      { header: 'Trademark Name Arabic', key: 'nameAr', width: 25 },
+      { header: 'Trademark Name English', key: 'nameEn', width: 25 },
+      { header: 'Class', key: 'classNumber', width: 12 },
+      { header: 'Owner Name Arabic', key: 'ownerNameAr', width: 25 },
+      { header: 'Owner Name English', key: 'ownerNameEn', width: 25 },
+      { header: 'Nationality', key: 'nationality', width: 15 },
+      { header: 'Filing Date', key: 'filingDate', width: 16 },
+      { header: 'Expiry Date', key: 'expiryDate', width: 16 },
+      { header: 'Status', key: 'status', width: 14 },
+      { header: 'Agent Name', key: 'agentName', width: 22 },
+    ];
+
+    // Style header row
+    const headerRow = worksheet.getRow(1);
+    headerRow.height = 28;
+    headerRow.font = { bold: true, size: 11, color: { argb: 'FFFFFFFF' } };
+    headerRow.fill = {
+      type: 'pattern',
+      pattern: 'solid',
+      fgColor: { argb: 'FF0284C7' },
+    };
+    headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+
+    const formatDateStr = (dateVal) => {
+      if (!dateVal) return '';
+      const d = new Date(dateVal);
+      return isNaN(d.getTime()) ? '' : d.toISOString().split('T')[0];
+    };
+
+    for (let i = 0; i < trademarks.length; i++) {
+      const tm = trademarks[i];
+      const rowIdx = i + 2;
+
+      worksheet.addRow({
+        image: '',
+        trademarkNumber: tm.trademarkNumber || '',
+        nameAr: tm.nameAr || '',
+        nameEn: tm.nameEn || '',
+        classNumber: tm.classNumber !== null && tm.classNumber !== undefined ? tm.classNumber : '',
+        ownerNameAr: tm.ownerNameAr || '',
+        ownerNameEn: tm.ownerNameEn || '',
+        nationality: tm.nationality || '',
+        filingDate: formatDateStr(tm.filingDate),
+        expiryDate: formatDateStr(tm.expiryDate),
+        status: tm.status || '',
+        agentName: tm.agentName || '',
+      });
+
+      const row = worksheet.getRow(rowIdx);
+      row.height = 55;
+      row.alignment = { vertical: 'middle', horizontal: 'left' };
+
+      // Align cells
+      row.getCell(1).alignment = { vertical: 'middle', horizontal: 'center' }; // Image cell
+      row.getCell(2).alignment = { vertical: 'middle', horizontal: 'center' }; // TM Number
+      row.getCell(5).alignment = { vertical: 'middle', horizontal: 'center' }; // Class
+      row.getCell(9).alignment = { vertical: 'middle', horizontal: 'center' }; // Filing Date
+      row.getCell(10).alignment = { vertical: 'middle', horizontal: 'center' }; // Expiry Date
+      row.getCell(11).alignment = { vertical: 'middle', horizontal: 'center' }; // Status
+
+      // Download and embed image if available
+      if (tm.image) {
+        const imgData = await fetchImageBuffer(tm.image);
+        if (imgData && imgData.buffer && imgData.buffer.length > 0) {
+          try {
+            const imageId = workbook.addImage({
+              buffer: imgData.buffer,
+              extension: imgData.extension,
+            });
+
+            worksheet.addImage(imageId, {
+              tl: { col: 0.18, row: rowIdx - 1 + 0.1 },
+              ext: { width: 50, height: 50 },
+              editAs: 'oneCell',
+            });
+          } catch (embedErr) {
+            console.error('[ExcelExport] Error embedding image for row:', rowIdx, embedErr.message);
+          }
+        }
+      }
+    }
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="trademarks.xlsx"`);
+
+    await workbook.xlsx.write(res);
+    return res.end();
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createTrademark,
   getTrademarks,
@@ -330,4 +539,5 @@ module.exports = {
   getTrademarkById,
   updateTrademark,
   deleteTrademark,
+  exportTrademarks,
 };

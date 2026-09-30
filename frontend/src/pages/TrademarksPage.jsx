@@ -5,8 +5,8 @@ import TrademarkTable from '../components/TrademarkTable';
 import TrademarkFormModal from '../components/TrademarkFormModal';
 import TrademarkDetailModal from '../components/TrademarkDetailModal';
 import DeleteConfirmModal from '../components/DeleteConfirmModal';
-import { getTrademarks } from '../api/trademarkApi';
-import { exportTrademarksToExcel } from '../utils/excelExporter';
+import { getTrademarks, exportTrademarksApi } from '../api/trademarkApi';
+import { exportTrademarksToExcel, triggerBlobDownload } from '../utils/excelExporter';
 import { Plus, ChevronRight, ChevronLeft, FileSpreadsheet, AlertCircle } from 'lucide-react';
 
 const TrademarksPage = ({ initialStatusFilter = '', isFormOpen, setIsFormOpen }) => {
@@ -64,26 +64,26 @@ const TrademarksPage = ({ initialStatusFilter = '', isFormOpen, setIsFormOpen })
     });
   };
 
-  const handleExportSelected = () => {
+  const handleExportSelected = async () => {
     setExportMessage('');
     if (selectedIds.length === 0) {
-      setExportMessage('Please select at least one trademark to export.');
+      setExportMessage('يرجى تحديد علامة تجارية واحدة على الأقل للتصدير');
       return;
     }
-    const selectedList = Object.values(selectedMap);
-    exportTrademarksToExcel(selectedList, 'selected-trademarks.xlsx');
+    try {
+      const blob = await exportTrademarksApi({ ids: selectedIds });
+      triggerBlobDownload(blob, 'selected-trademarks.xlsx');
+    } catch (err) {
+      setExportMessage(err.message || 'فشل في تصدير البيانات المحددة');
+    }
   };
 
   const handleExportAll = async () => {
     setExportMessage('');
     setExportingAll(true);
     try {
-      const res = await getTrademarks({ limit: 'all', ...filters });
-      if (res.success && res.data) {
-        exportTrademarksToExcel(res.data, 'trademarks.xlsx');
-      } else {
-        setExportMessage('حدث خطأ أثناء جلب البيانات للتصدير');
-      }
+      const blob = await exportTrademarksApi({ all: true, ...filters });
+      triggerBlobDownload(blob, 'trademarks.xlsx');
     } catch (err) {
       setExportMessage(err.message || 'فشل في تصدير البيانات');
     } finally {

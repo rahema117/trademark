@@ -15,7 +15,6 @@ const TrademarkFormModal = ({ isOpen, onClose, trademarkToEdit, onSuccess }) => 
     ownerNameEn: '',
     nationality: '',
     filingDate: '',
-    expiryDate: '',
     status: 'Active',
     agentName: '',
   });
@@ -36,7 +35,6 @@ const TrademarkFormModal = ({ isOpen, onClose, trademarkToEdit, onSuccess }) => 
         ownerNameEn: trademarkToEdit.ownerNameEn || '',
         nationality: trademarkToEdit.nationality || '',
         filingDate: formatDate(trademarkToEdit.filingDate),
-        expiryDate: formatDate(trademarkToEdit.expiryDate),
         status: trademarkToEdit.status || 'Active',
         agentName: trademarkToEdit.agentName || '',
       });
@@ -51,7 +49,6 @@ const TrademarkFormModal = ({ isOpen, onClose, trademarkToEdit, onSuccess }) => 
         ownerNameEn: '',
         nationality: '',
         filingDate: '',
-        expiryDate: '',
         status: 'Active',
         agentName: '',
       });
@@ -118,7 +115,6 @@ const TrademarkFormModal = ({ isOpen, onClose, trademarkToEdit, onSuccess }) => 
       data.append('nationality', formData.nationality.trim());
       data.append('status', formData.status);
       data.append('filingDate', formData.filingDate);
-      data.append('expiryDate', formData.expiryDate);
       data.append('agentName', formData.agentName.trim());
 
       if (imageFile) {
@@ -295,29 +291,16 @@ const TrademarkFormModal = ({ isOpen, onClose, trademarkToEdit, onSuccess }) => 
               />
             </div>
 
-            {/* Filing Date | Expiry Date */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div className="form-group">
-                <label className="form-label">تاريخ الإيداع</label>
-                <input
-                  type="date"
-                  name="filingDate"
-                  className="form-control"
-                  value={formData.filingDate}
-                  onChange={handleInputChange}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">تاريخ الانتهاء</label>
-                <input
-                  type="date"
-                  name="expiryDate"
-                  className="form-control"
-                  value={formData.expiryDate}
-                  onChange={handleInputChange}
-                />
-              </div>
+            {/* Filing Date */}
+            <div className="form-group">
+              <label className="form-label">تاريخ الإيداع</label>
+              <input
+                type="date"
+                name="filingDate"
+                className="form-control"
+                value={formData.filingDate}
+                onChange={handleInputChange}
+              />
             </div>
 
             {/* Status */}

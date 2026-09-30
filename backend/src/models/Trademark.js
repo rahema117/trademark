@@ -74,6 +74,24 @@ const trademarkSchema = new mongoose.Schema(
   }
 );
 
+// Pre-save hook to automatically calculate expiryDate = filingDate + 10 years
+trademarkSchema.pre('save', function (next) {
+  if (this.isModified('filingDate')) {
+    if (this.filingDate) {
+      const expDate = new Date(this.filingDate);
+      if (!isNaN(expDate.getTime())) {
+        expDate.setFullYear(expDate.getFullYear() + 10);
+        this.expiryDate = expDate;
+      } else {
+        this.expiryDate = null;
+      }
+    } else {
+      this.expiryDate = null;
+    }
+  }
+  next();
+});
+
 // Database Indexes for search & filtering efficiency
 trademarkSchema.index({ status: 1 });
 trademarkSchema.index({ classNumber: 1 });

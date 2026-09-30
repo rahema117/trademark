@@ -2,6 +2,20 @@ import * as XLSX from 'xlsx';
 import { formatDate, getImageUrl } from './formatters';
 
 /**
+ * Triggers a browser download of a blob excel file.
+ */
+export const triggerBlobDownload = (blobData, filename = 'trademarks.xlsx') => {
+  const url = window.URL.createObjectURL(new Blob([blobData]));
+  const link = document.createElement('a');
+  link.href = url;
+  link.setAttribute('download', filename);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
+};
+
+/**
  * Export array of trademarks to an .xlsx Excel file.
  *
  * @param {Array} trademarksList - List of trademark objects to export
