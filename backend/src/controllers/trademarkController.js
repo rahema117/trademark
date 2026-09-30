@@ -17,38 +17,53 @@ const fetchImageBuffer = async (imagePath) => {
   try {
     if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
       let fullUrl = imagePath;
-      if (fullUrl.includes('cloudinary.com') && fullUrl.endsWith('.webp')) {
-        fullUrl = fullUrl.replace(/\.webp$/i, '.png');
+      
+      // For Cloudinary URLs, force PNG conversion so ExcelJS gets a supported format
+      if (fullUrl.includes('cloudinary.com')) {
+        fullUrl = fullUrl.replace(/\/upload\/(?:f_[^\/]+\/)?/, '/upload/f_png/').replace(/\.webp$/i, '.png');
       }
 
       return new Promise((resolve) => {
         const client = fullUrl.startsWith('https') ? https : http;
-        const request = client.get(fullUrl, (res) => {
+        const req = client.get(fullUrl, (res) => {
+          // Handle HTTP redirects (301, 302, 307)
+          if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            return resolve(fetchImageBuffer(res.headers.location));
+          }
+
           if (res.statusCode !== 200) {
             return resolve(null);
           }
+
           const chunks = [];
           res.on('data', (chunk) => chunks.push(chunk));
           res.on('end', () => {
             const buffer = Buffer.concat(chunks);
-            const contentType = res.headers['content-type'] || '';
-            let extension = 'png';
-            if (contentType.includes('jpeg') || contentType.includes('jpg')) {
-              extension = 'jpeg';
-            } else if (contentType.includes('png')) {
-              extension = 'png';
-            } else if (contentType.includes('gif')) {
-              extension = 'gif';
-            } else if (/\.(jpg|jpeg)$/i.test(fullUrl)) {
-              extension = 'jpeg';
+            if (!buffer || buffer.length === 0) return resolve(null);
+
+            // Validate image magic bytes to ensure supported format (PNG, JPEG, GIF)
+            const isPng = buffer.length > 4 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47;
+            const isJpeg = buffer.length > 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+            const isGif = buffer.length > 3 && buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46;
+
+            let extension = null;
+            if (isPng) extension = 'png';
+            else if (isJpeg) extension = 'jpeg';
+            else if (isGif) extension = 'gif';
+
+            if (!extension) {
+              console.warn('[ExcelExport] Image format unrecognized or unsupported (e.g. WebP), skipping embedding for this row.');
+              return resolve(null);
             }
+
             resolve({ buffer, extension });
           });
           res.on('error', () => resolve(null));
         });
-        request.on('error', () => resolve(null));
-        request.setTimeout(10000, () => {
-          request.destroy();
+
+        req.on('error', () => resolve(null));
+        req.setTimeout(10000, () => {
+          req.destroy();
           resolve(null);
         });
       });
@@ -61,6 +76,9 @@ const fetchImageBuffer = async (imagePath) => {
         const buffer = fs.readFileSync(localPath);
         const ext = path.extname(localPath).toLowerCase().replace('.', '');
         const extension = ext === 'jpg' ? 'jpeg' : (ext || 'png');
+        if (extension !== 'png' && extension !== 'jpeg' && extension !== 'gif') {
+          return null;
+        }
         return { buffer, extension };
       }
     }
@@ -522,11 +540,13 @@ const exportTrademarks = async (req, res, next) => {
       }
     }
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', `attachment; filename="trademarks.xlsx"`);
+    const buffer = await workbook.xlsx.writeBuffer();
 
-    await workbook.xlsx.write(res);
-    return res.end();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="trademarks.xlsx"');
+    res.setHeader('Content-Length', buffer.byteLength || buffer.length);
+
+    return res.send(Buffer.from(buffer));
   } catch (error) {
     next(error);
   }

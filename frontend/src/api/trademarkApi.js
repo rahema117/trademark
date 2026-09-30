@@ -33,8 +33,7 @@ export const deleteTrademark = async (id) => {
 };
 
 export const exportTrademarksApi = async (data = {}) => {
-  const response = await apiClient.post('/trademarks/export', data, {
+  return await apiClient.post('/trademarks/export', data, {
     responseType: 'blob',
   });
-  return response.data;
 };

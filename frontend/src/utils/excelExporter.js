@@ -5,7 +5,11 @@ import { formatDate, getImageUrl } from './formatters';
  * Triggers a browser download of a blob excel file.
  */
 export const triggerBlobDownload = (blobData, filename = 'trademarks.xlsx') => {
-  const url = window.URL.createObjectURL(new Blob([blobData]));
+  if (!blobData) return;
+  const blob = blobData instanceof Blob
+    ? blobData
+    : new Blob([blobData], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = window.URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
   link.setAttribute('download', filename);
