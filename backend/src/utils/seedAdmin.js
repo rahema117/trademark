@@ -11,12 +11,18 @@ const seedAdmin = async () => {
   try {
     await connectDB();
 
-    const email = (process.env.ADMIN_EMAIL || 'admin@example.com').toLowerCase().trim();
-    const password = process.env.ADMIN_PASSWORD || 'admin123456';
+    const email = process.env.ADMIN_EMAIL ? process.env.ADMIN_EMAIL.toLowerCase().trim() : null;
+    const password = process.env.ADMIN_PASSWORD;
+
+    // التحقق من وجود المتغيرات ومنع الإنشاء ببيانات وهمية
+    if (!email || !password) {
+      console.error('[Admin Seed Error]: يجب تحديد ADMIN_EMAIL و ADMIN_PASSWORD في ملف .env أولاً.');
+      process.exit(1);
+    }
 
     const existingAdmin = await Admin.findOne({});
     if (existingAdmin) {
-      console.log(`[Admin Seed]: Admin already exists (${existingAdmin.email})`);
+      console.log(`[Admin Seed]: Admin already exists`);
       process.exit(0);
     }
 

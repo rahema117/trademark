@@ -20,12 +20,22 @@ const sendPaginated = (res, data = [], pagination = {}, message = 'Success', sta
   });
 };
 
-const sendError = (res, message = 'An error occurred', statusCode = 400, errors = []) => {
-  return res.status(statusCode).json({
+const sendError = (res, message = 'An error occurred', statusCode = 400, errors = [], stack = null) => {
+  const response = {
     success: false,
     message,
-    errors,
-  });
+  };
+
+  if (Array.isArray(errors) && errors.length > 0) {
+    response.errors = errors;
+  }
+
+  // Ensure stack traces are NEVER sent in production mode
+  if (process.env.NODE_ENV !== 'production' && stack) {
+    response.stack = stack;
+  }
+
+  return res.status(statusCode).json(response);
 };
 
 module.exports = {
